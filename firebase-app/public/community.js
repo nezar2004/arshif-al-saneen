@@ -1,4 +1,4 @@
-import {collection,doc,addDoc,deleteDoc,onSnapshot} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+import {collection,onSnapshot} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 const formatDate=value=>new Intl.DateTimeFormat('ar-JO',{dateStyle:'medium',timeStyle:'short'}).format(value);
 const decode=base64=>Uint8Array.from(atob(base64),x=>x.charCodeAt(0));
 export async function encodeFile(file){
@@ -38,7 +38,7 @@ function controls(node){
   }
   return {button,field,select,form};
 }
-export function communityPanel({main,user,db,community,node,names,alarmNav,alarmArea}){
+export function communityPanel({main,user,db,community,reminderRequest,node,names,alarmNav,alarmArea}){
   const c=controls(node), wrapper=node('section','',{class:'study-section'});
   const nav=node('nav','',{'aria-label':'أدوات الطالب'}), pane=node('section','',{class:'admin-card',hidden:''});
   wrapper.append(node('h2','أدوات الدراسة'),nav,pane);main.append(wrapper);
@@ -64,10 +64,47 @@ export function communityPanel({main,user,db,community,node,names,alarmNav,alarm
   },{'aria-expanded':'false','aria-controls':'exam-reminders'});
   alarmNav.append(alarmButton);
   alarmCard.append(node('h3','منبّه الامتحانات'));
+  const pushStatus=node('p','',{class:'muted',role:'status'});
+  const supported='serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
+  const registration=supported?navigator.serviceWorker.register('/reminder-sw.js').catch(()=>null):Promise.resolve(null);
+  const pushConfig=reminderRequest({action:'config'}).catch(()=>null);
+  const enable=c.button('فعّل إشعارات الجهاز',async()=>{
+    enable.disabled=true;
+    try{
+      if(await Notification.requestPermission()!=='granted')throw new Error('اسمح بالإشعارات من إعدادات المتصفح.');
+      const [worker,config]=await Promise.all([registration,pushConfig]);
+      if(!worker||!config?.publicKey)throw new Error('إشعارات الجهاز غير متاحة حاليًا.');
+      const active=await navigator.serviceWorker.ready;
+      const subscription=await active.pushManager.getSubscription()??await active.pushManager.subscribe({
+        userVisibleOnly:true,applicationServerKey:decode(config.publicKey.replace(/-/g,'+').replace(/_/g,'/'))
+      });
+      await reminderRequest({action:'enable',subscription:subscription.toJSON()});
+      pushStatus.textContent='إشعارات الموقع مفعّلة على هذا الجهاز.';
+    }catch(error){pushStatus.textContent=error.message||'تعذّر تفعيل إشعارات الجهاز.';}
+    finally{enable.disabled=false;}
+  });
+  const disable=c.button('أوقف إشعارات الجهاز',async()=>{
+    disable.disabled=true;
+    try{
+      const worker=await registration;
+      const subscription=await worker?.pushManager.getSubscription();
+      if(subscription){
+        await reminderRequest({action:'disable',endpoint:subscription.endpoint});
+        await subscription.unsubscribe();
+      }
+      pushStatus.textContent='إشعارات الموقع متوقفة على هذا الجهاز.';
+    }catch{pushStatus.textContent='تعذّر إيقاف إشعارات الجهاز.';}
+    finally{disable.disabled=false;}
+  });
+  if(supported){
+    const actions=node('div','',{class:'study-actions'});
+    actions.append(enable,disable);alarmCard.append(actions);
+  }else pushStatus.textContent='على iPhone أو iPad، أضف الموقع إلى الشاشة الرئيسية وافتحه من هناك لتفعيل الإشعارات.';
+  alarmCard.append(pushStatus);
   const draft=c.form(alarmCard,'حفظ الموعد',async values=>{
     const at=new Date(values.get('at')).getTime();
     if(!Number.isFinite(at)||at<=Date.now())throw new Error('اختر موعدًا في المستقبل.');
-    await addDoc(reminders,{title:values.get('title').trim(),at,lead:Number(values.get('lead'))});
+    await reminderRequest({action:'save',title:values.get('title').trim(),at,lead:Number(values.get('lead'))});
     return 'تم حفظ الموعد.';
   });
   c.field(draft.form,'عنوان الامتحان أو الكويز','title','input',{required:'',maxlength:'120'});
@@ -75,7 +112,7 @@ export function communityPanel({main,user,db,community,node,names,alarmNav,alarm
   c.select(draft.form,'ذكّرني قبل الموعد بـ','lead',[[15,'١٥ دقيقة'],[30,'٣٠ دقيقة'],[60,'ساعة'],[1440,'يوم']]);
   draft.finish();
   const list=node('div');
-  alarmCard.append(list,node('p','يظهر التنبيه داخل المكتبة وهي مفتوحة.',{class:'muted'}));
+  alarmCard.append(list);
   let alarms=[];
   const seen=new Set();
   function check(){
@@ -96,7 +133,7 @@ export function communityPanel({main,user,db,community,node,names,alarmNav,alarm
       const timer=left<=0?'انتهى الموعد':Math.floor(left/1440)+' يوم، '+Math.floor((left%1440)/60)+' ساعة، '+left%60+' دقيقة';
       const line=node('div','',{class:'admin-row'});
       line.append(node('span',row.title+' · '+formatDate(row.at)+' · '+timer),c.button('إزالة',async()=>{
-        try{await deleteDoc(doc(reminders,row.id));}catch{notices.append(node('p','تعذّر إزالة الموعد.',{class:'status','data-error':'true'}));}
+        try{await reminderRequest({action:'remove',id:row.id});}catch{notices.append(node('p','تعذّر إزالة الموعد.',{class:'status','data-error':'true'}));}
       }));
       list.append(line);
     }
