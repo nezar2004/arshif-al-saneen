@@ -226,6 +226,7 @@ async function dashboard(staff){
     const profile=(await getDoc(doc(db,'students',user.uid))).data();
     const materials=await getDocs(query(collection(db,'subjects'),where('active','==',true)));
     await studyWorkspace({main,user,db,materials:materials.docs,favoriteSubjects:profile?.subjects??[],node,message,
+      reminders:async data=>(await httpsCallable(functions,'reminders')(data)).data,
       library:async data=>(await httpsCallable(functions,'library')(data)).data,
       community:async data=>(await httpsCallable(functions,'community')(data)).data});
   }catch(error){report(explain(error),true);}
