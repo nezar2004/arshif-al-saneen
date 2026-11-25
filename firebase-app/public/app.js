@@ -5,7 +5,7 @@ import {getFunctions,connectFunctionsEmulator,httpsCallable} from 'https://www.g
 import {getStorage,connectStorageEmulator} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js';
 import {production} from '/config.js';
 import {adminWorkspace} from '/admin.js';
-import {studyWorkspace} from '/study.js';
+import {groupSubjects,normalize,studyWorkspace} from '/study.js';
 const local=['localhost','127.0.0.1'].includes(location.hostname);
 const main=document.querySelector('#main'), theme=document.querySelector('#theme');
 const pref=matchMedia('(prefers-color-scheme: dark)');
@@ -123,15 +123,21 @@ async function register(){
   const rules=node('ul','',{class:'rules wide',id:'rules'});
   function progress(){rules.replaceChildren(...checks.map(([title,check])=>node('li',title,{'data-met':String(check(pwd.value))})));}
   pwd.addEventListener('input',progress);progress();form.append(rules);
-  const subjects=node('fieldset','',{class:'wide'}), list=node('div','',{class:'subjects'}), status=node('p','جارٍ تحميل المواد…',{class:'muted'});
+  const subjects=node('fieldset','',{class:'wide'}), list=node('div','',{class:'subject-sections'}), status=node('p','جارٍ تحميل المواد…',{class:'muted'});
   const search=node('input','',{type:'search','aria-label':'ابحث في المواد',placeholder:'ابحث في المواد'});
   subjects.append(node('legend','المواد التي تدرسها'),search,list,status);form.append(subjects);
   search.addEventListener('input',()=>{
-    const term=search.value.trim().toLowerCase();
+    const term=normalize(search.value.trim());
     let matches=0;
-    for(const choice of list.children) {
-      choice.hidden=!choice.textContent.toLowerCase().includes(term);
-      if(!choice.hidden)matches++;
+    for(const section of list.children){
+      let sectionMatches=0;
+      for(const choice of section.querySelectorAll('label')){
+        choice.hidden=!normalize(section.dataset.name+' '+choice.textContent).includes(term);
+        if(!choice.hidden)sectionMatches++;
+      }
+      section.hidden=sectionMatches===0;
+      if(term&&sectionMatches)section.open=true;
+      matches+=sectionMatches;
     }
     status.textContent=list.childElementCount&&!matches?'لا توجد مادة مطابقة.':'';
   });
@@ -150,12 +156,17 @@ async function register(){
   if(!app){status.textContent='ستظهر المواد بعد ربط قاعدة البيانات.';return;}
   try{
     const result=await getDocs(query(collection(db,'subjects'),where('active','==',true)));
-    const items=result.docs.sort((a,b)=>a.data().name.localeCompare(b.data().name,'ar'));
-    for(const item of items){
-      const choice=node('label',item.data().name);
-      choice.prepend(node('input','',{type:'checkbox',name:'subjects',value:item.id}));list.append(choice);
+    for(const [name,items] of groupSubjects(result.docs)){
+      const section=node('details','',{'data-name':name});
+      const choices=node('div','',{class:'subjects'});
+      section.append(node('summary',name),choices);
+      for(const item of items){
+        const choice=node('label',item.data().name);
+        choice.prepend(node('input','',{type:'checkbox',name:'subjects',value:item.id}));choices.append(choice);
+      }
+      list.append(section);
     }
-    status.textContent=items.length?'':'ستظهر المواد عندما يضيفها صاحب الموقع.';
+    status.textContent=result.empty?'ستظهر المواد عندما يضيفها صاحب الموقع.':'';
   }catch{status.textContent='تعذّر تحميل المواد. حدّث الصفحة.';}
 }
 function reset(){
@@ -213,23 +224,8 @@ async function dashboard(staff){
       return;
     }
     const profile=(await getDoc(doc(db,'students',user.uid))).data();
-    const filter=node('input','',{type:'search',class:'library-search','aria-label':'ابحث في موادك',placeholder:'ابحث في موادك'});
-    const group=node('section','',{class:'grid','aria-label':'المواد المختارة'});
-    const noMatches=node('p','لا توجد مادة مطابقة.',{hidden:''});
-    const materials=await Promise.all((profile?.subjects??[]).map(id=>getDoc(doc(db,'subjects',id)).catch(error=>{
-      if(error.code==='permission-denied')return null;
-      throw error;
-    })));
-    for(const item of materials)if(item?.exists())group.append(node('article',item.data().name,{class:'subject-card'}));
-    if(group.childElementCount){
-      filter.oninput=()=>{
-        const term=filter.value.trim().toLowerCase();
-        for(const card of group.children)card.hidden=!card.textContent.toLowerCase().includes(term);
-        noMatches.hidden=[...group.children].some(card=>!card.hidden);
-      };
-      main.append(filter,group,noMatches);
-    }else main.append(node('p','لا توجد مواد متاحة الآن.'));
-    await studyWorkspace({main,user,db,materials,node,message,
+    const materials=await getDocs(query(collection(db,'subjects'),where('active','==',true)));
+    await studyWorkspace({main,user,db,materials:materials.docs,favoriteSubjects:profile?.subjects??[],node,message,
       library:async data=>(await httpsCallable(functions,'library')(data)).data,
       community:async data=>(await httpsCallable(functions,'community')(data)).data});
   }catch(error){report(explain(error),true);}
