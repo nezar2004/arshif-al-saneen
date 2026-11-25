@@ -33,6 +33,7 @@ export async function studyWorkspace({main,user,db,materials,favoriteSubjects,li
   const sections=new Map(activeMaterials.map(x=>[x.id,sectionOf(x.data())]));
   let mode='all';
   const tabs=node('nav','',{'aria-label':'أقسام المكتبة'});
+  const alarmArea=node('div');
   const filters=node('section','',{class:'study-filters','aria-label':'فلترة الامتحانات'});
   const results=node('section','',{class:'exam-sections','aria-label':'الامتحانات'});
   const pinned=node('div','',{class:'study-actions favorite-subjects',hidden:''});
@@ -67,7 +68,7 @@ export async function studyWorkspace({main,user,db,materials,favoriteSubjects,li
     tabs.append(tab);
   }
   const section=node('section','',{class:'study-section'});
-  section.append(node('h2','مكتبة الامتحانات'),tabs,pinned,filters,count,results);
+  section.append(node('h2','مكتبة الامتحانات'),tabs,alarmArea,pinned,filters,count,results);
   for(const [id,name] of names){
     if(chosen.has(id))pinned.append(button(name,()=>{sectionFilter.value=sections.get(id);subject.value=id;render();}));
   }
@@ -77,7 +78,7 @@ export async function studyWorkspace({main,user,db,materials,favoriteSubjects,li
     records.set(examId,{...records.get(examId),...values});
   }
   function render(){
-    tabs.querySelectorAll('button').forEach(item=>item.setAttribute('aria-pressed',String(item.dataset.mode===mode)));
+    tabs.querySelectorAll('button[data-mode]').forEach(item=>item.setAttribute('aria-pressed',String(item.dataset.mode===mode)));
     pinned.hidden=mode!=='favorite'||!pinned.childElementCount;
     for(const option of subject.options)option.hidden=Boolean(option.value&&sectionFilter.value&&sections.get(option.value)!==sectionFilter.value);
     const filtered=catalog.exams.filter(exam=>{
@@ -233,5 +234,5 @@ export async function studyWorkspace({main,user,db,materials,favoriteSubjects,li
     dialog.showModal();load(0);
   }
   render();
-  communityPanel({main,user,db,community,node,names});
+  communityPanel({main,user,db,community,node,names,alarmNav:tabs,alarmArea});
 }
