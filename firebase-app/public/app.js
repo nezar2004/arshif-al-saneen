@@ -100,7 +100,7 @@ function login(staff=false,activate=false){
     location.assign(staff?'/workspace':'/library');
   },report);
   body.append(form);
-  appendLinks(body,link('نسيت كلمة المرور؟','/reset'),...(staff?[]:[link('إنشاء حساب طالب','/register'),link('متابعة التفعيل','/activate')]));
+  if(!staff)appendLinks(body,link('نسيت كلمة المرور؟','/reset'),link('إنشاء حساب طالب','/register'),link('متابعة التفعيل','/activate'));
 }
 const checks=[
   ['٨ أحرف على الأقل',value=>value.length>=8],
