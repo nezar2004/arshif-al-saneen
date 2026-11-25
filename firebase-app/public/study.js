@@ -21,7 +21,7 @@ export function groupSubjects(materials){
   return [...groups].sort(([a],[b])=>rank(a)-rank(b)||a.localeCompare(b,'ar'));
 }
 
-export async function studyWorkspace({main,user,db,materials,favoriteSubjects,library,community,node,message}){
+export async function studyWorkspace({main,user,db,materials,favoriteSubjects,library,community,reminders,node,message}){
   const report=message(main);
   const [catalog,saved]=await Promise.all([library({action:'list'}),getDocs(collection(db,'students',user.uid,'study'))]);
   const records=new Map(saved.docs.map(x=>[x.id,x.data()]));
@@ -234,5 +234,5 @@ export async function studyWorkspace({main,user,db,materials,favoriteSubjects,li
     dialog.showModal();load(0);
   }
   render();
-  communityPanel({main,user,db,community,node,names,alarmNav:tabs,alarmArea});
+  communityPanel({main,user,db,community,reminderRequest:reminders,node,names,alarmNav:tabs,alarmArea});
 }
