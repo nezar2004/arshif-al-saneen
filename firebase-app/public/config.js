@@ -1,0 +1,1 @@
+export const production = {"projectId":"arshif-saneen-nezar","appId":"1:391104212518:web:4186bebf563a5ee85880e7","storageBucket":"arshif-saneen-nezar.firebasestorage.app","apiKey":"AIzaSyAW6Y8dZkGJ6bxgtbtGNNZ_wU_71985bNU","authDomain":"arshif-saneen-nezar.firebaseapp.com","messagingSenderId":"391104212518","projectNumber":"391104212518","version":"2"};

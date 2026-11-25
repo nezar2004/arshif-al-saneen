@@ -1,0 +1,20 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function staff() {
+      let role = firestore.get(/databases/(default)/documents/roles/$(request.auth.uid)).data;
+      return role.active == true && role.role in ['owner','assistant'];
+    }
+    match /exam-images/{uid}/{batch}/{filename} {
+      allow create: if request.auth != null && request.auth.uid == uid
+        && request.auth.token.email_verified == true && staff()
+        && !firestore.exists(/databases/(default)/documents/examBatches/$(batch))
+        && request.resource.size > 0 && request.resource.size <= 10485760
+        && filename.matches('[a-f0-9-]{36}[.](jpg|png|webp)')
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

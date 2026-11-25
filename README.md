@@ -19,3 +19,8 @@
 ## الاستضافة
 
 ينشئ `npm run build` ملف Cloudflare Worker في `dist/server/index.js`. تستخدم استضافة Sites الربط `DB` لقاعدة D1 و`BUCKET` لملفات R2. يبدأ مخطط البيانات من `drizzle/0000_archive.sql`. تضبط الاستضافة هوية المشرف بواسطة السر `SITES_ADMIN_EMAIL` وعناوين الهوية التي يضيفها وكيل Sites. عند نقل المصدر إلى مضيف آخر استخدم `ADMIN_PASSWORD` القوي من إعدادات الأسرار، واحذف دعم عناوين هوية Sites إذا لم يكن المضيف يحقنها بشكل موثوق. يمكن وضع سجل المصدر في مستودع GitHub خاص دون نقل ملفات الامتحانات أو إعدادات الأسرار إليه.
+
+
+## نسخة Firebase
+
+توجد النسخة التي تجمع المراحل الأربع في [firebase-app](firebase-app/README.md). إعدادها مرتبط بمشروع Firebase `arshif-saneen-nezar`.
