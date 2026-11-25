@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="ابحث في أسئلة السنوات السابقة حسب القسم والمادة ونوع الامتحان.">
+<title>أرشيف السنوات</title>
+<link rel="stylesheet" href="/style.css">
+<script type="module" src="/app.js"></script>
+</head>
+<body>
+<header class="top"><div class="wrap top-row">
+<a class="brand" href="/"><span class="brand-mark" aria-hidden="true">▤</span> أرشيف السنوات</a>
+<a class="nav" id="nav" href="/admin">لوحة الإدارة</a>
+</div></header>
+<main class="wrap" id="main">
+<section class="hero">
+<div class="hero-copy"><p class="eyebrow">مكتبة الامتحانات</p><h1>أسئلة السنوات السابقة</h1><p>ابحث عن امتحانك حسب القسم أو المادة، وتصفّح الأسئلة أو حمّلها للمراجعة.</p></div>
+<div class="hero-art" aria-hidden="true"><div class="sheet sheet-back"></div><div class="sheet sheet-front"><i></i><b></b><b></b><b></b><span>✓</span></div></div>
+</section>
+<section class="filters" aria-label="تصفية الأسئلة">
+<label class="search">البحث<input id="query" type="search" placeholder="ابحث باسم المادة أو الامتحان أو السنة"></label>
+<label>القسم<select id="department"></select></label>
+<label>المادة<select id="subject"></select></label>
+<label>نوع الامتحان<select id="kind"></select></label>
+</section>
+<section class="results" aria-labelledby="results-title"><div class="section-title"><h2 id="results-title">الامتحانات</h2><p id="count" aria-live="polite"></p></div><div id="results" class="grid" aria-busy="true"><p>جارٍ تحميل المكتبة…</p></div></section>
+</main>
+<footer><div class="wrap foot"><strong>أرشيف السنوات</strong><span>مكتبة أسئلة الامتحانات السابقة</span></div></footer>
+</body>
+</html>
