@@ -52,6 +52,16 @@ function fileRow(file) {
 async function catalog() {
   const output = $('results');
   try {
+    const session = await api('students/session');
+    const nav = $('nav');
+    if (session.student) {
+      nav.replaceWith(button('تسجيل الخروج',async () => {
+        try { await api('students/session','DELETE'); location.assign('/'); }
+        catch (error) { output.prepend(empty('تعذّر تسجيل الخروج',error.message)); }
+      }));
+    } else {
+      nav.href='/admin'; nav.textContent='لوحة الإدارة';
+    }
     data = await api('catalog');
     const department = $('department'), subject = $('subject'), kind = $('kind');
     fill(department,choices(data.departments),'كل الأقسام');
@@ -245,7 +255,7 @@ async function refresh(message) {
 async function admin() {
   document.title = 'لوحة الإدارة | أرشيف السنوات';
   const nav = $('nav');
-  nav.href = '/'; nav.textContent = 'المكتبة';
+  nav.href = '/library'; nav.textContent = 'المكتبة';
   const head = el('div',undefined,{class:'admin-head toolbar'});
   head.append(el('h1','لوحة الإدارة'));
   const main = $('main');
@@ -282,5 +292,3 @@ async function admin() {
   } catch (error) { status(error.message,true); }
 }
 
-if (location.pathname === '/admin') admin();
-else catalog();

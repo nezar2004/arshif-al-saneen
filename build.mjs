@@ -6,5 +6,7 @@ for (const [path, file, type] of [
   ['/', 'index.html', 'text/html'], ['/style.css', 'style.css', 'text/css'],
   ['/app.js', 'app.js', 'text/javascript']
 ]) assets[path] = [await readFile(file, 'utf8'), type];
-await writeFile('dist/server/index.js', 'const assets = ' + JSON.stringify(assets) + ';\n' + await readFile('worker.js', 'utf8'));
+assets['/app.js'][0] += '\n' + await readFile('student.js', 'utf8');
+await writeFile('dist/server/index.js', 'const assets = ' + JSON.stringify(assets) + ';\n' +
+  await readFile('student-auth.js', 'utf8') + '\n' + await readFile('worker.js', 'utf8'));
 await copyFile('.openai/hosting.json', 'dist/.openai/hosting.json');

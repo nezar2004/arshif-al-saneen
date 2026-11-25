@@ -48,6 +48,7 @@ async function api(request, env, url) {
   const all = async (sql, ...values) => (await stmt(sql, ...values).all()).results;
 
   if (method !== 'GET' && method !== 'HEAD' && request.headers.get('origin') !== url.origin) fail('الطلب غير مسموح.',403);
+  if (path.startsWith('/api/students/')) return await studentAuth(path,request,stmt);
   if (path === '/api/session' && method === 'GET') {
     return json({admin:await isAdmin(request,env), password:Boolean(env.ADMIN_PASSWORD), sites:Boolean(env.SITES_ADMIN_EMAIL)});
   }
@@ -62,6 +63,7 @@ async function api(request, env, url) {
     return Response.json({admin:false},{headers:{'Set-Cookie':cookie(request,'',0),'Cache-Control':'no-store'}});
   }
   if (path === '/api/catalog' && method === 'GET') {
+    if (!(await studentSession(request,stmt))?.row && !await isAdmin(request,env)) fail('سجّل الدخول إلى المكتبة.',401);
     const [departments,subjects,papers,files] = await Promise.all([
       all('SELECT * FROM departments ORDER BY name'),
       all('SELECT * FROM subjects ORDER BY name'),
@@ -75,6 +77,7 @@ async function api(request, env, url) {
   if (!match) fail('الصفحة غير موجودة.',404);
   const [,table,key] = match;
   if (table === 'files' && key && ['GET','HEAD'].includes(method)) {
+    if (!(await studentSession(request,stmt))?.row && !await isAdmin(request,env)) fail('سجّل الدخول إلى المكتبة.',401);
     const row = await stmt('SELECT * FROM files WHERE id = ?',key).first();
     if (!row) fail('الملف غير موجود.',404);
     const object = method === 'HEAD' ? await env.BUCKET.head(key) : await env.BUCKET.get(key);
@@ -167,12 +170,19 @@ export default {
     try {
       const url = new URL(request.url);
       if (url.pathname.startsWith('/api/')) return await api(request,env,url);
-      const asset = assets[url.pathname === '/admin' ? '/' : url.pathname];
+      if (url.pathname === '/library') {
+        const stmt = (sql,...args) => env.DB.prepare(sql).bind(...args);
+        if (!(await studentSession(request,stmt))?.row && !await isAdmin(request,env)) {
+          return new Response(null,{status:303,headers:{Location:'/', 'Cache-Control':'no-store'}});
+        }
+      }
+      const asset = assets[['/admin','/owner','/register','/library'].includes(url.pathname) ? '/' : url.pathname];
       if (!asset || !['GET','HEAD'].includes(request.method)) fail('الصفحة غير موجودة.',404);
       return new Response(request.method === 'HEAD' ? null : asset[0],{headers:{
         'Content-Type':asset[1] + '; charset=utf-8',
         'Content-Security-Policy':"default-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
-        'X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin'
+        'X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin',
+        'Cache-Control':asset[1] === 'text/html' ? 'no-store' : 'no-cache'
       }});
     } catch (error) {
       if (!error.status && !(error instanceof SyntaxError)) console.error(error);

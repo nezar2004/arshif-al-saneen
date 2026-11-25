@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { Readable } from 'node:stream';
 import { DatabaseSync } from 'node:sqlite';
-import { mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rm, readdir } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import './build.mjs';
 const {default:worker} = await import('./dist/server/index.js');
@@ -9,7 +9,9 @@ const {default:worker} = await import('./dist/server/index.js');
 const dir = process.env.ARCHIVE_DATA_DIR || '.data';
 await mkdir(dir + '/files',{recursive:true});
 const db = new DatabaseSync(dir + '/catalog.sqlite');
-db.exec(await readFile('drizzle/0000_archive.sql','utf8'));
+for (const file of (await readdir('drizzle')).filter(name => name.endsWith('.sql')).sort()) {
+  db.exec(await readFile('drizzle/' + file,'utf8'));
+}
 const password = process.env.ADMIN_PASSWORD || randomBytes(18).toString('base64url');
 export const env = {
   ADMIN_PASSWORD:password,
