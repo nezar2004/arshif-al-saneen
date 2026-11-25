@@ -3,19 +3,39 @@ import {communityPanel,examConversation} from '/community.js';
 
 const kinds={mid:'ميد',final:'فاينل',quiz:'كويز',makeup:'ميك أب',general:'سنوات عامة',mixed:'ميد وفاينل',first:'فيرست',second:'سكند'};
 const terms={first:'الأول',second:'الثاني',summer:'الصيفي'};
-const normalize=value=>String(value??'').toLowerCase().normalize('NFKC').replace(/[\u064b-\u065fـ]/g,'').replace(/[أإآ]/g,'ا').replace(/[٠-٩]/g,d=>String(d.charCodeAt(0)-1632));
+export const normalize=value=>String(value??'').toLowerCase().normalize('NFKC').replace(/[\u064b-\u065fـ]/g,'').replace(/[أإآ]/g,'ا').replace(/[٠-٩]/g,d=>String(d.charCodeAt(0)-1632));
+const sectionOf=subject=>subject.section?.trim()||'مواد أخرى';
+const order=['CIS','CS','CYS','BIT','LAB','DA','OTHER'];
+function rank(section){
+  const index=order.indexOf(section.split(' ')[0]);
+  return index===-1?order.length:index;
+}
+export function groupSubjects(materials){
+  const groups=new Map();
+  for(const item of materials){
+    const name=sectionOf(item.data());
+    if(!groups.has(name))groups.set(name,[]);
+    groups.get(name).push(item);
+  }
+  for(const items of groups.values())items.sort((a,b)=>a.data().name.localeCompare(b.data().name,'ar'));
+  return [...groups].sort(([a],[b])=>rank(a)-rank(b)||a.localeCompare(b,'ar'));
+}
 
-export async function studyWorkspace({main,user,db,materials,library,community,node,message}){
+export async function studyWorkspace({main,user,db,materials,favoriteSubjects,library,community,node,message}){
   const report=message(main);
   const [catalog,saved]=await Promise.all([library({action:'list'}),getDocs(collection(db,'students',user.uid,'study'))]);
   const records=new Map(saved.docs.map(x=>[x.id,x.data()]));
-  const activeMaterials=materials.filter(x=>x?.exists());
+  const groups=groupSubjects(materials);
+  const activeMaterials=groups.flatMap(([,items])=>items);
+  const chosen=new Set(favoriteSubjects);
+  const isFavorite=exam=>records.get(exam.id)?.favorite??chosen.has(exam.subject);
   const names=new Map(activeMaterials.map(x=>[x.id,x.data().name]));
-  const sections=new Map(activeMaterials.map(x=>[x.id,x.data().section]));
+  const sections=new Map(activeMaterials.map(x=>[x.id,sectionOf(x.data())]));
   let mode='all';
   const tabs=node('nav','',{'aria-label':'أقسام المكتبة'});
   const filters=node('section','',{class:'study-filters','aria-label':'فلترة الامتحانات'});
-  const results=node('section','',{class:'grid','aria-label':'الامتحانات'});
+  const results=node('section','',{class:'exam-sections','aria-label':'الامتحانات'});
+  const pinned=node('div','',{class:'study-actions favorite-subjects',hidden:''});
   const count=node('p','',{class:'muted','aria-live':'polite'});
   const search=node('input','',{type:'search',placeholder:'اسم الامتحان أو المادة أو السنة','aria-label':'البحث في الامتحانات'});
   const searchLabel=node('label','بحث');searchLabel.append(search);filters.append(searchLabel);
@@ -29,14 +49,18 @@ export async function studyWorkspace({main,user,db,materials,library,community,n
     wrap.append(input);filters.append(wrap);input.onchange=render;return input;
   }
   const subject=select('المادة',[...names]);
-  const sectionFilter=select('القسم',[...new Set([...sections.values()].filter(Boolean))].map(x=>[x,x]));
+  const sectionFilter=select('القسم',groups.map(([name])=>[name,name]));
+  sectionFilter.onchange=()=>{
+    if(sectionFilter.value&&sections.get(subject.value)!==sectionFilter.value)subject.value='';
+    render();
+  };
   const year=select('السنة',[...new Set(catalog.exams.map(x=>x.year).filter(Boolean))].sort().reverse().map(y=>[y,y]));
   const term=select('الفصل',Object.entries(terms));
   const kind=select('نوع الامتحان',Object.entries(kinds));
   search.oninput=render;
-  for(const [key,label] of [['all','الامتحانات'],['favorite','المفضلة'],['recent','شوهد مؤخرًا'],['popular','الأكثر مشاهدة']]){
+  for(const [key,label] of [['all','كل الأقسام'],['favorite','المفضلة'],['recent','شوهد مؤخرًا'],['popular','الأكثر مشاهدة']]){
     const tab=button(label,async()=>{
-      mode=key;render();
+      mode=key;subject.value='';sectionFilter.value='';render();
       if(key==='popular'){
         try{catalog.exams=(await library({action:'list'})).exams;render();}
         catch{report('تعذّر تحديث عدد المشاهدات.',true);}
@@ -45,7 +69,10 @@ export async function studyWorkspace({main,user,db,materials,library,community,n
     tabs.append(tab);
   }
   const section=node('section','',{class:'study-section'});
-  section.append(node('h2','مكتبة الامتحانات'),tabs,filters,count,results);
+  section.append(node('h2','مكتبة الامتحانات'),tabs,pinned,filters,count,results);
+  for(const [id,name] of names){
+    if(chosen.has(id))pinned.append(button(name,()=>{sectionFilter.value=sections.get(id);subject.value=id;render();}));
+  }
   main.append(section);
   async function update(examId,values){
     await setDoc(doc(db,'students',user.uid,'study',examId),values,{merge:true});
@@ -53,9 +80,11 @@ export async function studyWorkspace({main,user,db,materials,library,community,n
   }
   function render(){
     tabs.querySelectorAll('button').forEach(item=>item.setAttribute('aria-pressed',String(item.dataset.mode===mode)));
+    pinned.hidden=mode!=='favorite'||!pinned.childElementCount;
+    for(const option of subject.options)option.hidden=Boolean(option.value&&sectionFilter.value&&sections.get(option.value)!==sectionFilter.value);
     const filtered=catalog.exams.filter(exam=>{
       const state=records.get(exam.id);
-      return (mode!=='favorite'||state?.favorite===true)&&(mode!=='recent'||state?.viewedAt)&&
+      return (mode!=='favorite'||isFavorite(exam))&&(mode!=='recent'||state?.viewedAt)&&
         (mode!=='popular'||exam.views>0)&&
         (!subject.value||exam.subject===subject.value)&&(!sectionFilter.value||sections.get(exam.subject)===sectionFilter.value)&&(!year.value||String(exam.year)===year.value)&&
         (!term.value||exam.term===term.value)&&(!kind.value||exam.kind===kind.value)&&
@@ -66,24 +95,52 @@ export async function studyWorkspace({main,user,db,materials,library,community,n
     if(mode==='popular')filtered.sort((a,b)=>b.views-a.views||b.createdAt-a.createdAt);
     count.textContent=filtered.length+' نتيجة';
     results.replaceChildren();
-    if(!filtered.length)results.append(node('p',mode==='favorite'?'لا توجد امتحانات مفضلة مطابقة.':mode==='recent'?'لم تشاهد امتحانات مطابقة بعد.':mode==='popular'?'لا توجد مشاهدات مطابقة بعد.':'لا توجد امتحانات مطابقة في موادك.'));
+    if(!filtered.length)results.append(node('p',mode==='favorite'?'لا توجد امتحانات مفضلة مطابقة.':mode==='recent'?'لم تشاهد امتحانات مطابقة بعد.':mode==='popular'?'لا توجد مشاهدات مطابقة بعد.':'لا توجد امتحانات مطابقة.'));
+    const cardsBySection=new Map();
+    const ranked=mode==='recent'||mode==='popular';
+    if(ranked&&filtered.length){
+      const grid=node('div','',{class:'grid'});cardsBySection.set('',grid);results.append(grid);
+    }else{
+      const present=new Set(filtered.map(exam=>sections.get(exam.subject)));
+      for(const [name] of groups){
+        if(!present.has(name))continue;
+        const group=node('section');
+        const grid=node('div','',{class:'grid'});
+        group.append(node('h3',name),grid);results.append(group);cardsBySection.set(name,grid);
+      }
+    }
     for(const exam of filtered){
-      const state=records.get(exam.id);
+      const favorite=isFavorite(exam);
       const card=node('article','',{class:'subject-card study-card'});
       card.append(node('p',names.get(exam.subject),{class:'muted'}),node('h3',exam.title),
         node('p',[exam.year,terms[exam.term],kinds[exam.kind],exam.count+' صورة',...(mode==='popular'?[exam.views+' طالب شاهد الامتحان']:[])].filter(Boolean).join(' · '),{class:'muted'}));
       const controls=node('div','',{class:'study-actions'});
       controls.append(button('عرض الصور',()=>openViewer(exam),{class:'primary'}));
-      const pin=button(state?.favorite?'إزالة من المفضلة':'أضف للمفضلة',async()=>{
+      const pin=button(favorite?'إزالة من المفضلة':'أضف للمفضلة',async()=>{
         pin.disabled=true;
-        try{await update(exam.id,{favorite:!records.get(exam.id)?.favorite});render();}
+        try{await update(exam.id,{favorite:!isFavorite(exam)});render();}
         catch{report('تعذّر تحديث المفضلة.',true);pin.disabled=false;}
-      },{'aria-pressed':String(Boolean(state?.favorite))});
-      controls.append(pin);card.append(controls);results.append(card);
+      },{'aria-pressed':String(favorite)});
+      controls.append(pin);card.append(controls);
+      cardsBySection.get(ranked?'':sections.get(exam.subject))?.append(card);
     }
   }
   function openViewer(exam){
     let index=0, scale=1, angle=0, attempt=0, objectURL='', viewed=false;
+    const pages=new Map();
+    function page(target){
+      if(!pages.has(target)){
+        const pending=library({action:'image',id:exam.id,index:target}).then(result=>{
+          const bytes=Uint8Array.from(atob(result.content),char=>char.charCodeAt(0));
+          return new Blob([bytes],{type:result.type});
+        }).catch(error=>{
+          if(pages.get(target)===pending)pages.delete(target);
+          throw error;
+        });
+        pages.set(target,pending);
+      }
+      return pages.get(target);
+    }
     const dialog=node('dialog','',{class:'viewer','aria-labelledby':'viewer-title'});
     const header=node('header','',{class:'viewer-header'});
     const close=button('إغلاق',()=>dialog.close(),{autofocus:''});
@@ -134,7 +191,7 @@ export async function studyWorkspace({main,user,db,materials,library,community,n
     dialog.append(header,controls,stage,notes,discussion);
     document.body.append(dialog);
     function cleanupURL(){if(objectURL){URL.revokeObjectURL(objectURL);objectURL='';}}
-    dialog.addEventListener('close',()=>{attempt++;cleanupURL();window.removeEventListener('resize',transform);dialog.remove();render();},{once:true});
+    dialog.addEventListener('close',()=>{attempt++;pages.clear();cleanupURL();window.removeEventListener('resize',transform);dialog.remove();render();},{once:true});
     window.addEventListener('resize',transform);
     stage.onkeydown=event=>{
       const target=event.key==='ArrowLeft'?index+1:event.key==='ArrowRight'?index-1:null;
@@ -154,12 +211,13 @@ export async function studyWorkspace({main,user,db,materials,library,community,n
       status.textContent='جارٍ تجهيز الصورة…';stage.setAttribute('aria-busy','true');
       for(const control of [enlarge,reduce,rotate,reset])control.disabled=true;
       try{
-        const result=await library({action:'image',id:exam.id,index});
+        const blob=await page(target);
         if(sequence!==attempt)return;
-        const bytes=Uint8Array.from(atob(result.content),char=>char.charCodeAt(0));
-        objectURL=URL.createObjectURL(new Blob([bytes],{type:'image/jpeg'}));
+        objectURL=URL.createObjectURL(blob);
         image.alt='صورة '+(index+1)+' من '+exam.title;
         image.src=objectURL;layout.replaceChildren(image);stage.replaceChildren(layout);
+        for(const cached of pages.keys())if(Math.abs(cached-target)>1)pages.delete(cached);
+        if(target+1<exam.count)page(target+1).catch(()=>{});
         for(const control of [enlarge,reduce,rotate,reset])control.disabled=false;
         if(!viewed){
           viewed=true;
