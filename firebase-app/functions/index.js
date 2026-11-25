@@ -1,9 +1,10 @@
 const {onCall,HttpsError}=require('firebase-functions/v2/https');
-const {initializeApp}=require('firebase-admin/app');
+const {initializeApp,cert}=require('firebase-admin/app');
 const {getAuth}=require('firebase-admin/auth');
 const {getFirestore,Timestamp,FieldValue}=require('firebase-admin/firestore');
 const {createHash}=require('node:crypto');
-initializeApp();
+const credential=process.env.ARCHIVE_FIREBASE_CREDENTIALS;
+initializeApp(credential?{credential:cert(JSON.parse(credential))}:undefined);
 const db=getFirestore(), auth=getAuth();
 const invalid=message=>{ throw new HttpsError('invalid-argument',message); };
 const generic='الرقم الجامعي أو كلمة المرور غير صحيحة.';
@@ -95,6 +96,7 @@ const {randomBytes}=require('node:crypto');
 const uuid=/^[a-f0-9-]{36}$/;
 const images={'image/jpeg':'jpg','image/png':'png','image/webp':'webp'};
 function bucket() {
+  if(process.env.ARCHIVE_SUPABASE_URL) return require('./private-storage.cjs').supabaseBucket();
   const project=process.env.GCLOUD_PROJECT||process.env.GOOGLE_CLOUD_PROJECT;
   const suffix=process.env.FIREBASE_STORAGE_EMULATOR_HOST?'.appspot.com':'.firebasestorage.app';
   return getStorage().bucket(process.env.ARCHIVE_BUCKET||project+suffix);
@@ -108,6 +110,25 @@ async function staffRole(request) {
 exports.management=onCall({maxInstances:5},async request=>{
   const role=await staffRole(request);
   const data=request.data??{};
+  if(data.action==='uploadImage'){
+    const uid=request.auth.uid;
+    if(typeof data.batch!=='string'||!uuid.test(data.batch)||typeof data.name!=='string'||
+      !/^[a-f0-9-]{36}\.(jpg|png|webp)$/.test(data.name)||images[data.type]!==data.name.split('.').pop()||
+      typeof data.content!=='string'||data.content.length>14_000_000||!/^[a-zA-Z0-9+/]+={0,2}$/.test(data.content))
+      invalid('بيانات الصورة غير صالحة.');
+    const bytes=Buffer.from(data.content,'base64');
+    if(!bytes.length||bytes.length>10485760)invalid('حجم الصورة يتجاوز ١٠ ميغابايت.');
+    if((await db.doc('examBatches/'+data.batch).get()).exists)throw new HttpsError('already-exists','هذه الدفعة محفوظة بالفعل.');
+    const path='exam-images/'+uid+'/'+data.batch+'/'+data.name;
+    const object=bucket().file(path);
+    try{await object.save(bytes,{contentType:data.type,resumable:false,ifAbsent:true});}
+    catch(error){
+      if(Number(error.code)!==409)throw error;
+      const [existing]=await object.download();
+      if(!existing.equals(bytes))throw new HttpsError('already-exists','الاسم مرتبط بصورة أخرى.');
+    }
+    return {ok:true};
+  }
   if(data.action==='publish') {
     const uid=request.auth.uid;
     if(!uuid.test(data.batch)||!['mid','final','quiz','makeup'].includes(data.kind)||

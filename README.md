@@ -23,4 +23,4 @@
 
 ## نسخة Firebase
 
-توجد النسخة التي تجمع المراحل الأربع في [firebase-app](firebase-app/README.md). إعدادها مرتبط بمشروع Firebase `arshif-saneen-nezar`.
+توجد نسخة المراحل الأربع في [firebase-app](firebase-app/README.md)، وهي مرتبطة بمشروع `arshif-saneen-nezar`. إعداد [Render المجاني](render.yaml) موجود في جذر المستودع.

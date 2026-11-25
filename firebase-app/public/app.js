@@ -14,8 +14,9 @@ setTheme(localStorage.getItem('archive-theme')||(pref.matches?'dark':'light'));
 theme.onclick=()=>{const mode=document.documentElement.dataset.theme==='dark'?'light':'dark';localStorage.setItem('archive-theme',mode);setTheme(mode);};
 
 const app=local||production?initializeApp(local?{projectId:'demo-archive-phase',apiKey:'demo-key',authDomain:'localhost',storageBucket:'demo-archive-phase.appspot.com'}:production):null;
-const auth=app&&getAuth(app), db=app&&getFirestore(app), functions=app&&getFunctions(app);
-const storage=app&&getStorage(app);
+const auth=app&&getAuth(app), db=app&&getFirestore(app);
+const functions=app&&getFunctions(app,local?'us-central1':location.origin+'/api');
+const storage=local&&getStorage(app);
 if(local){
   connectAuthEmulator(auth,'http://127.0.0.1:9099',{disableWarnings:true});
   connectFirestoreEmulator(db,'127.0.0.1',8080);

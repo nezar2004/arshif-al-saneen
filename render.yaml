@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: arshif-saneen
+    runtime: node
+    plan: free
+    region: ohio
+    rootDir: firebase-app
+    buildCommand: npm ci --prefix functions --omit=dev
+    startCommand: node functions/render.cjs
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: 22.16.0
+      - key: ARCHIVE_FIREBASE_CREDENTIALS
+        sync: false
+      - key: ARCHIVE_WEB_API_KEY
+        sync: false
+      - key: ARCHIVE_SUPABASE_URL
+        sync: false
+      - key: ARCHIVE_SUPABASE_KEY
+        sync: false
+      - key: ARCHIVE_SUPABASE_BUCKET
+        value: exam-archive
+

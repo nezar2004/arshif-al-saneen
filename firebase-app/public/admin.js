@@ -59,7 +59,8 @@ export async function adminWorkspace({main,role,user,db,auth,storage,manage,comm
         while(pending.done<files.length){
           const index=pending.done;
           progress.textContent='جارٍ رفع '+(index+1)+' من '+files.length+'…';
-          await uploadBytes(ref(storage,'exam-images/'+user.uid+'/'+pending.batch+'/'+pending.names[index]),files[index],{contentType:files[index].type});
+          if(storage)await uploadBytes(ref(storage,'exam-images/'+user.uid+'/'+pending.batch+'/'+pending.names[index]),files[index],{contentType:files[index].type});
+          else await manage({action:'uploadImage',batch:pending.batch,name:pending.names[index],type:files[index].type,content:await encodeFile(files[index])});
           pending.done++;
         }
         const {images,...classification}=metadata;
