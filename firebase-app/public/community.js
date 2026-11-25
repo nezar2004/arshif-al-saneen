@@ -1,6 +1,25 @@
 import {collection,doc,addDoc,deleteDoc,onSnapshot} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 const formatDate=value=>new Intl.DateTimeFormat('ar-JO',{dateStyle:'medium',timeStyle:'short'}).format(value);
 const decode=base64=>Uint8Array.from(atob(base64),x=>x.charCodeAt(0));
+const calendarDate=value=>new Date(value).toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z');
+const calendarText=value=>String(value).replace(/[\\;,]/g,char=>'\\'+char).replace(/\r\n|\r|\n/g,'\\n');
+function reminderCalendar(row){
+  const lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Arshif Al Saneen//Exam Reminders//AR','CALSCALE:GREGORIAN',
+    'BEGIN:VEVENT','UID:'+row.id+'@arshif-saneen.onrender.com','DTSTAMP:'+calendarDate(Date.now()),
+    'DTSTART:'+calendarDate(row.at),'SUMMARY:'+calendarText(row.title),
+    'BEGIN:VALARM','ACTION:DISPLAY','TRIGGER:-PT'+row.lead+'M','DESCRIPTION:'+calendarText(row.title),
+    'END:VALARM','END:VEVENT','END:VCALENDAR'];
+  const encoder=new TextEncoder();
+  return lines.map(line=>{
+    let folded='',length=0;
+    for(const char of line){
+      const bytes=encoder.encode(char).length;
+      if(length+bytes>75){folded+='\r\n ';length=1;}
+      folded+=char;length+=bytes;
+    }
+    return folded;
+  }).join('\r\n')+'\r\n';
+}
 export async function encodeFile(file){
   const url=await new Promise((resolve,reject)=>{
     const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);
@@ -75,7 +94,7 @@ export function communityPanel({main,user,db,community,node,names,alarmNav,alarm
   c.select(draft.form,'ذكّرني قبل الموعد بـ','lead',[[15,'١٥ دقيقة'],[30,'٣٠ دقيقة'],[60,'ساعة'],[1440,'يوم']]);
   draft.finish();
   const list=node('div');
-  alarmCard.append(list,node('p','يظهر التنبيه داخل المكتبة وهي مفتوحة.',{class:'muted'}));
+  alarmCard.append(list,node('p','للتذكير والموقع مسكّر، أضف الموعد لتقويم جهازك وتأكد من تفعيل إشعارات التقويم.',{class:'muted'}));
   let alarms=[];
   const seen=new Set();
   function check(){
@@ -95,7 +114,14 @@ export function communityPanel({main,user,db,community,node,names,alarmNav,alarm
       const left=Math.ceil((row.at-now)/60000);
       const timer=left<=0?'انتهى الموعد':Math.floor(left/1440)+' يوم، '+Math.floor((left%1440)/60)+' ساعة، '+left%60+' دقيقة';
       const line=node('div','',{class:'admin-row'});
-      line.append(node('span',row.title+' · '+formatDate(row.at)+' · '+timer),c.button('إزالة',async()=>{
+      line.append(node('span',row.title+' · '+formatDate(row.at)+' · '+timer));
+      if(left>0)line.append(c.button('أضف للتقويم',()=>{
+        const url=URL.createObjectURL(new Blob([reminderCalendar(row)],{type:'text/calendar;charset=utf-8'}));
+        const link=node('a','',{href:url,download:'exam-'+row.id+'.ics'});
+        document.body.append(link);link.click();link.remove();
+        setTimeout(()=>URL.revokeObjectURL(url),5000);
+      }));
+      line.append(c.button('إزالة',async()=>{
         try{await deleteDoc(doc(reminders,row.id));}catch{notices.append(node('p','تعذّر إزالة الموعد.',{class:'status','data-error':'true'}));}
       }));
       list.append(line);
