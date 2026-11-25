@@ -229,6 +229,15 @@ async function activeStudent(request){
     throw new HttpsError('permission-denied','هذا الحساب لا يستطيع فتح المكتبة.');
   return profile.data();
 }
+const push=require('./reminder-push.cjs').reminderPush({db});
+exports.reminders=onCall({maxInstances:5},async request=>{
+  await activeStudent(request);
+  try{return await push.action(request.auth.uid,request.data??{});}
+  catch(error){
+    if(typeof error.code==='number')throw new HttpsError('internal','تعذّر حفظ إعدادات التنبيهات.');
+    throw new HttpsError('invalid-argument',error.message);
+  }
+});
 exports.library=onCall({memory:'512MiB',maxInstances:5,concurrency:8},async request=>{
   const profile=await activeStudent(request);
   const data=request.data??{};
