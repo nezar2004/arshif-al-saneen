@@ -48,7 +48,7 @@ function formFrame(title,description){
   main.querySelector(route==='/staff'?'nav a:last-child':'nav a:first-child').setAttribute('aria-current','page');
   const body=main.querySelector('#body');
   body.append(node('h1',title),node('p',description,{class:'muted'}));
-  document.title=title+' | أرشيف السنوات';
+  document.title=title+' | سنوات IT';
   return body;
 }
 function message(parent){

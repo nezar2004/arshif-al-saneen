@@ -17,3 +17,5 @@
 .subject-sections [hidden], .favorite-subjects[hidden] { display: none; }
 .exam-sections { display: grid; gap: 24px; margin-block-start: 18px; }
 .exam-sections > section > .grid { margin-block-start: 8px; }
+
+.brand-logo { display: block; object-fit: cover; border-radius: 50%; }

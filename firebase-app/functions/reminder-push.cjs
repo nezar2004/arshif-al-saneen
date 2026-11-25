@@ -86,7 +86,7 @@ function reminderPush({db}){
         ]);
         if(role.data()?.role==='student'&&role.data()?.active===true&&reminder.exists){
           const event=reminder.data();
-          const payload=JSON.stringify({id:job.id,title:'أرشيف السنوات',body:'اقترب موعد امتحانك: '+event.title});
+          const payload=JSON.stringify({id:job.id,title:'سنوات IT',body:'اقترب موعد امتحانك: '+event.title});
           const result=await Promise.allSettled(subscribers.docs.map(async device=>{
             try{
               await webpush.sendNotification(device.data().subscription,payload,{TTL:Math.max(0,Math.floor((row.expiresAt-Date.now())/1000)),timeout:8000,
