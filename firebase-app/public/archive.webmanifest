@@ -1,0 +1,12 @@
+{
+  "id": "/",
+  "name": "أرشيف السنوات",
+  "short_name": "أرشيف السنوات",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/library",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#241f2e",
+  "background_color": "#16141d"
+}
