@@ -59,6 +59,9 @@ function message(parent){
 function explain(error){
   if(error?.code?.startsWith('functions/')&&!['functions/internal','functions/unknown','functions/unavailable'].includes(error.code)) return error.message;
   if(error?.code==='auth/too-many-requests')return 'محاولات كثيرة. جرّب بعد قليل.';
+  if(['auth/invalid-credential','auth/wrong-password','auth/user-not-found'].includes(error?.code))return 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
+  if(error?.code==='auth/network-request-failed'||error?.code==='unavailable')return 'تعذّر الاتصال بخدمة تسجيل الدخول. تحقّق من اتصالك وحاول مرة أخرى.';
+  if(error?.code==='permission-denied')return 'تعذّر التحقق من صلاحية حسابك. إذا استمرت المشكلة تواصل مع إدارة الموقع.';
   if(error?.code?.startsWith('auth/'))return 'تعذّر إكمال الطلب. تحقّق من بياناتك وحاول مرة أخرى.';
   return 'تعذّر الاتصال بالخدمة. جرّب مرة أخرى.';
 }
@@ -82,14 +85,15 @@ function login(staff=false,activate=false){
   else universityEmailField(form);
   field(form,'كلمة المرور','password',{...passAttrs,autocomplete:'current-password'});
   submit(form,'تسجيل الدخول',async data=>{
-    const credential=await signInWithEmailAndPassword(auth,data.email,data.password);
-    if(activate){location.assign('/verify');return;}
+    const credential=await signInWithEmailAndPassword(auth,data.email.trim().toLowerCase(),data.password);
+    if(activate||(!staff&&!credential.user.emailVerified)){location.assign('/verify');return;}
     if(staff&&!credential.user.emailVerified){
       try{await sendEmailVerification(credential.user);report('تم طلب إرسال رابط التفعيل. افتحه ثم سجّل الدخول مجددًا.');}
       finally{await signOut(auth);}
       return;
     }
     const role=(await getDoc(doc(db,'roles',credential.user.uid))).data();
+    if(!staff&&!role){location.assign('/verify');return;}
     if(!role?.active||!(staff?['owner','assistant'].includes(role.role):role.role==='student')){
       await signOut(auth);report('هذا الحساب لا يملك صلاحية الدخول من هذه الصفحة.',true);return;
     }
