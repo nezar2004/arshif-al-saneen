@@ -239,11 +239,13 @@ exports.library=onCall({memory:'512MiB',maxInstances:5,concurrency:8},async requ
       if(subject.data()?.active!==true)return [];
       const items=await db.collection('examBatches').where('subject','==',id).get();
       return items.docs.map(doc=>{
-        const {title,subject,year,term,kind,files,createdAt,views}=doc.data();
-        return {id:doc.id,title,subject,year,term,kind,count:files.length,createdAt:createdAt.toMillis(),views:views??0};
+        const {title,subject,year,term,kind,files,createdAt,views,sourceOrder}=doc.data();
+        return {id:doc.id,title,subject,year,term,kind,count:files.length,createdAt:createdAt.toMillis(),views:views??0,sourceOrder:sourceOrder??null};
       });
     }));
-    return {exams:snapshots.flat().sort((a,b)=>b.createdAt-a.createdAt)};
+    return {exams:snapshots.flat().sort((a,b)=>a.sourceOrder!==null&&b.sourceOrder!==null?
+      a.sourceOrder-b.sourceOrder:a.sourceOrder===null&&b.sourceOrder!==null?-1:
+      b.sourceOrder===null&&a.sourceOrder!==null?1:b.createdAt-a.createdAt)};
   }
   if(data.action!=='image'||typeof data.id!=='string'||!uuid.test(data.id)||!Number.isInteger(data.index)||data.index<0)
     invalid('اختر صورة من الامتحان.');

@@ -37,7 +37,7 @@ service cloud.firestore {
     }
     match /subjects/{id} {
       allow read: if resource.data.active == true || role('owner') || role('assistant');
-      allow create, update: if role('owner') && request.resource.data.keys().hasOnly(['name','active'])
+      allow create, update: if role('owner') && request.resource.data.keys().hasOnly(['name','active','section'])
         && request.resource.data.name is string && request.resource.data.name.size() > 0
         && request.resource.data.name.size() <= 120 && request.resource.data.active is bool;
     }

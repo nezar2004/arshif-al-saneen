@@ -1,7 +1,7 @@
 import {collection,doc,getDocs,setDoc,serverTimestamp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 import {communityPanel,examConversation} from '/community.js';
 
-const kinds={mid:'ميد',final:'فاينل',quiz:'كويز',makeup:'ميك أب'};
+const kinds={mid:'ميد',final:'فاينل',quiz:'كويز',makeup:'ميك أب',general:'سنوات عامة',mixed:'ميد وفاينل',first:'فيرست',second:'سكند'};
 const terms={first:'الأول',second:'الثاني',summer:'الصيفي'};
 const normalize=value=>String(value??'').toLowerCase().normalize('NFKC').replace(/[\u064b-\u065fـ]/g,'').replace(/[أإآ]/g,'ا').replace(/[٠-٩]/g,d=>String(d.charCodeAt(0)-1632));
 
@@ -9,7 +9,9 @@ export async function studyWorkspace({main,user,db,materials,library,community,n
   const report=message(main);
   const [catalog,saved]=await Promise.all([library({action:'list'}),getDocs(collection(db,'students',user.uid,'study'))]);
   const records=new Map(saved.docs.map(x=>[x.id,x.data()]));
-  const names=new Map(materials.filter(x=>x?.exists()).map(x=>[x.id,x.data().name]));
+  const activeMaterials=materials.filter(x=>x?.exists());
+  const names=new Map(activeMaterials.map(x=>[x.id,x.data().name]));
+  const sections=new Map(activeMaterials.map(x=>[x.id,x.data().section]));
   let mode='all';
   const tabs=node('nav','',{'aria-label':'أقسام المكتبة'});
   const filters=node('section','',{class:'study-filters','aria-label':'فلترة الامتحانات'});
@@ -27,7 +29,8 @@ export async function studyWorkspace({main,user,db,materials,library,community,n
     wrap.append(input);filters.append(wrap);input.onchange=render;return input;
   }
   const subject=select('المادة',[...names]);
-  const year=select('السنة',[...new Set(catalog.exams.map(x=>x.year))].sort().reverse().map(y=>[y,y]));
+  const sectionFilter=select('القسم',[...new Set([...sections.values()].filter(Boolean))].map(x=>[x,x]));
+  const year=select('السنة',[...new Set(catalog.exams.map(x=>x.year).filter(Boolean))].sort().reverse().map(y=>[y,y]));
   const term=select('الفصل',Object.entries(terms));
   const kind=select('نوع الامتحان',Object.entries(kinds));
   search.oninput=render;
@@ -54,7 +57,7 @@ export async function studyWorkspace({main,user,db,materials,library,community,n
       const state=records.get(exam.id);
       return (mode!=='favorite'||state?.favorite===true)&&(mode!=='recent'||state?.viewedAt)&&
         (mode!=='popular'||exam.views>0)&&
-        (!subject.value||exam.subject===subject.value)&&(!year.value||String(exam.year)===year.value)&&
+        (!subject.value||exam.subject===subject.value)&&(!sectionFilter.value||sections.get(exam.subject)===sectionFilter.value)&&(!year.value||String(exam.year)===year.value)&&
         (!term.value||exam.term===term.value)&&(!kind.value||exam.kind===kind.value)&&
         normalize([exam.title,names.get(exam.subject),exam.year,kinds[exam.kind],terms[exam.term]].join(' ')).includes(normalize(search.value.trim()));
     });
@@ -68,7 +71,7 @@ export async function studyWorkspace({main,user,db,materials,library,community,n
       const state=records.get(exam.id);
       const card=node('article','',{class:'subject-card study-card'});
       card.append(node('p',names.get(exam.subject),{class:'muted'}),node('h3',exam.title),
-        node('p',[exam.year,terms[exam.term],kinds[exam.kind],exam.count+' صورة',...(mode==='popular'?[exam.views+' طالب شاهد الامتحان']:[])].join(' · '),{class:'muted'}));
+        node('p',[exam.year,terms[exam.term],kinds[exam.kind],exam.count+' صورة',...(mode==='popular'?[exam.views+' طالب شاهد الامتحان']:[])].filter(Boolean).join(' · '),{class:'muted'}));
       const controls=node('div','',{class:'study-actions'});
       controls.append(button('عرض الصور',()=>openViewer(exam),{class:'primary'}));
       const pin=button(state?.favorite?'إزالة من المفضلة':'أضف للمفضلة',async()=>{
