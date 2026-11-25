@@ -232,26 +232,24 @@ async function activeStudent(request){
 exports.library=onCall({memory:'512MiB',maxInstances:5,concurrency:8},async request=>{
   const profile=await activeStudent(request);
   const data=request.data??{};
-  const subjects=Array.isArray(profile.subjects)?profile.subjects.slice(0,30):[];
   if(data.action==='list'){
-    const snapshots=await Promise.all(subjects.map(async id=>{
-      const subject=await db.doc('subjects/'+id).get();
-      if(subject.data()?.active!==true)return [];
-      const items=await db.collection('examBatches').where('subject','==',id).get();
-      return items.docs.map(doc=>{
+    const [subjects,items]=await Promise.all([
+      db.collection('subjects').where('active','==',true).get(),
+      db.collection('examBatches').select('title','subject','year','term','kind','files','createdAt','views','sourceOrder').get()
+    ]);
+    const active=new Set(subjects.docs.map(doc=>doc.id));
+    const exams=items.docs.flatMap(doc=>{
         const {title,subject,year,term,kind,files,createdAt,views,sourceOrder}=doc.data();
-        return {id:doc.id,title,subject,year,term,kind,count:files.length,createdAt:createdAt.toMillis(),views:views??0,sourceOrder:sourceOrder??null};
-      });
-    }));
-    return {exams:snapshots.flat().sort((a,b)=>a.sourceOrder!==null&&b.sourceOrder!==null?
+        if(!active.has(subject))return [];
+        return [{id:doc.id,title,subject,year,term,kind,count:files.length,createdAt:createdAt.toMillis(),views:views??0,sourceOrder:sourceOrder??null}];
+    });
+    return {exams:exams.sort((a,b)=>a.sourceOrder!==null&&b.sourceOrder!==null?
       a.sourceOrder-b.sourceOrder:a.sourceOrder===null&&b.sourceOrder!==null?-1:
       b.sourceOrder===null&&a.sourceOrder!==null?1:b.createdAt-a.createdAt)};
   }
   if(data.action!=='image'||typeof data.id!=='string'||!uuid.test(data.id)||!Number.isInteger(data.index)||data.index<0)
     invalid('اختر صورة من الامتحان.');
-  const exam=(await db.doc('examBatches/'+data.id).get()).data();
-  if(!exam||!subjects.includes(exam.subject)||(await db.doc('subjects/'+exam.subject).get()).data()?.active!==true)
-    throw new HttpsError('permission-denied','هذه الصورة غير متاحة لحسابك.');
+  const exam=await scopedExam(data.id);
   const path=exam.files[data.index];
   if(!path)throw new HttpsError('not-found','الصورة غير موجودة.');
   const [original]=await bucket().file(path).download();
@@ -259,8 +257,8 @@ exports.library=onCall({memory:'512MiB',maxInstances:5,concurrency:8},async requ
   let decoded;
   try{
     decoded=await sharp(original,{limitInputPixels:40_000_000}).rotate()
-      .resize({width:1800,height:2200,fit:'inside'})
-      .flatten({background:'#fff'}).jpeg({quality:88}).toBuffer({resolveWithObject:true});
+      .resize({width:1800,height:2200,fit:'inside',withoutEnlargement:true})
+      .flatten({background:'#fff'}).toColourspace('srgb').raw().toBuffer({resolveWithObject:true});
   }catch{throw new HttpsError('failed-precondition','ملف الصورة تالف أو أبعاده أكبر من المسموح.');}
   const {data:scaled,info}=decoded;
   const {width,height}=info;
@@ -271,20 +269,22 @@ exports.library=onCall({memory:'512MiB',maxInstances:5,concurrency:8},async requ
   <text x="240" y="72" direction="rtl" font-size="${Math.min(42,Math.max(10,Math.floor(750/Array.from(profile.fullName).length)))}">${escapeXml(profile.fullName)}</text>
   <text x="240" y="119" direction="ltr">${escapeXml(profile.number)}</text></g>
   </pattern></defs><rect width="100%" height="100%" fill="url(#mark)"/></svg>`);
-  const marked=await sharp(scaled).composite([{input:svg}]).jpeg({quality:86}).toBuffer();
   const examRef=db.doc('examBatches/'+data.id);
   const seen=examRef.collection('uniqueViews').doc(request.auth.uid);
-  await db.runTransaction(async tx=>{
+  const [marked]=await Promise.all([
+    sharp(scaled,{raw:{width,height,channels:info.channels}}).composite([{input:svg}]).jpeg({quality:84}).toBuffer(),
+    db.runTransaction(async tx=>{
     if((await tx.get(seen)).exists)return;
     tx.create(seen,{at:Timestamp.now()});
     tx.update(examRef,{views:FieldValue.increment(1)});
-  });
+    })
+  ]);
   return {type:'image/jpeg',content:marked.toString('base64')};
 });
-async function scopedExam(profile,id){
+async function scopedExam(id){
   if(typeof id!=='string'||!uuid.test(id))invalid('اختر امتحانًا صالحًا.');
   const exam=(await db.doc('examBatches/'+id).get()).data();
-  if(!exam||!profile.subjects?.includes(exam.subject)||!(await db.doc('subjects/'+exam.subject).get()).data()?.active)
+  if(!exam||(await db.doc('subjects/'+exam.subject).get()).data()?.active!==true)
     throw new HttpsError('permission-denied','هذا الامتحان غير متاح لحسابك.');
   return exam;
 }
@@ -354,7 +354,7 @@ exports.community=onCall({memory:'256MiB',maxInstances:5},async request=>{
     return {content:bytes.toString('base64')};
   }
   if(['discussion','comment','report'].includes(data.action)){
-    const exam=await scopedExam(profile,data.exam);
+    const exam=await scopedExam(data.exam);
     if(!Number.isInteger(data.page)||data.page<0||data.page>=exam.files.length)invalid('اختر صفحة صالحة.');
     if(data.action==='discussion'){
       const rows=await db.collection('comments').where('scope','==',data.exam+'-'+data.page).limit(100).get();
