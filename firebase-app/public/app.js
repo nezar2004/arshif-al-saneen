@@ -76,15 +76,13 @@ function submit(form,label,run,report){
 function appendLinks(body,...items){const p=node('div','',{class:'links'});p.append(...items);body.append(p);}
 function login(staff=false,activate=false){
   const body=formFrame(staff?'دخول صاحب الموقع والمساعدين':activate?'متابعة تفعيل الحساب':'دخول الطالب',
-    staff?'استخدم البريد الإلكتروني المخصص لحساب الإدارة.':activate?'أدخل بريد التسجيل وكلمة المرور لمتابعة التفعيل.':'استخدم رقمك الجامعي للوصول إلى موادك.');
+    staff?'استخدم البريد الإلكتروني المخصص لحساب الإدارة.':activate?'أدخل بريد التسجيل وكلمة المرور لمتابعة التفعيل.':'استخدم بريدك الجامعي وكلمة المرور للوصول إلى موادك.');
   const report=message(body), form=node('form');
   if(staff) field(form,'البريد الإلكتروني','email',emailAttrs);
-  else if(activate) universityEmailField(form);
-  else field(form,'الرقم الجامعي','number',numAttrs);
+  else universityEmailField(form);
   field(form,'كلمة المرور','password',{...passAttrs,autocomplete:'current-password'});
   submit(form,'تسجيل الدخول',async data=>{
-    const credential=staff||activate?await signInWithEmailAndPassword(auth,data.email,data.password):
-      await signInWithCustomToken(auth,(await account({action:'login',...data})).token);
+    const credential=await signInWithEmailAndPassword(auth,data.email,data.password);
     if(activate){location.assign('/verify');return;}
     if(staff&&!credential.user.emailVerified){
       try{await sendEmailVerification(credential.user);report('تم طلب إرسال رابط التفعيل. افتحه ثم سجّل الدخول مجددًا.');}
