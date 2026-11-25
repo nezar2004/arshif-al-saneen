@@ -38,40 +38,45 @@ function controls(node){
   }
   return {button,field,select,form};
 }
-export function communityPanel({main,user,db,community,node,names}){
+export function communityPanel({main,user,db,community,node,names,alarmNav,alarmArea}){
   const c=controls(node), wrapper=node('section','',{class:'study-section'});
-  const nav=node('nav','',{'aria-label':'أدوات الطالب'}), pane=node('section','',{class:'admin-card'});
+  const nav=node('nav','',{'aria-label':'أدوات الطالب'}), pane=node('section','',{class:'admin-card',hidden:''});
   wrapper.append(node('h2','أدوات الدراسة'),nav,pane);main.append(wrapper);
   const reminders=collection(db,'students',user.uid,'reminders');
-  let dispose=()=>{}, activePanel='';
+  let activePanel='';
   const tab=(id,title,render)=>{
     const button=c.button(title,()=>{
-      activePanel=id;dispose();dispose=()=>{};
+      activePanel=id;pane.hidden=false;
       for(const b of nav.children)b.setAttribute('aria-pressed',String(b===button));
       pane.replaceChildren(node('h3',title));render();
     });
     nav.append(button);return button;
   };
-  const first=tab('alarms','منبّه الامتحانات',()=>{
-    const draft=c.form(pane,'حفظ الموعد',async values=>{
-      const at=new Date(values.get('at')).getTime();
-      if(!Number.isFinite(at)||at<=Date.now())throw new Error('اختر موعدًا في المستقبل.');
-      await addDoc(reminders,{title:values.get('title').trim(),at,lead:Number(values.get('lead'))});
-      return 'تم حفظ الموعد.';
-    });
-    c.field(draft.form,'عنوان الامتحان أو الكويز','title','input',{required:'',maxlength:'120'});
-    c.field(draft.form,'الموعد','at','input',{required:'',type:'datetime-local'});
-    c.select(draft.form,'ذكّرني قبل الموعد بـ','lead',[[15,'١٥ دقيقة'],[30,'٣٠ دقيقة'],[60,'ساعة'],[1440,'يوم']]);
-    draft.finish();
-    const list=node('div');pane.append(list);
-    const render=()=>drawAlarms(list);
-    pane.append(node('p','يظهر التنبيه داخل المكتبة وهي مفتوحة.',{class:'muted'}));
-    redraw=render;render();
-    dispose=()=>{redraw=()=>{};};
-  });
-  let alarms=[], redraw=()=>{};
+  const alarmPane=node('section','',{id:'exam-reminders',hidden:''});
+  const alarmCard=node('div','',{class:'admin-card'});
+  alarmPane.append(alarmCard);
   const notices=node('div','',{role:'status','aria-live':'polite'});
-  wrapper.insertBefore(notices,nav);
+  alarmArea.append(notices,alarmPane);
+  const alarmButton=c.button('التنبيهات',()=>{
+    alarmPane.hidden=!alarmPane.hidden;
+    alarmButton.setAttribute('aria-expanded',String(!alarmPane.hidden));
+    if(!alarmPane.hidden)drawAlarms(list);
+  },{'aria-expanded':'false','aria-controls':'exam-reminders'});
+  alarmNav.append(alarmButton);
+  alarmCard.append(node('h3','منبّه الامتحانات'));
+  const draft=c.form(alarmCard,'حفظ الموعد',async values=>{
+    const at=new Date(values.get('at')).getTime();
+    if(!Number.isFinite(at)||at<=Date.now())throw new Error('اختر موعدًا في المستقبل.');
+    await addDoc(reminders,{title:values.get('title').trim(),at,lead:Number(values.get('lead'))});
+    return 'تم حفظ الموعد.';
+  });
+  c.field(draft.form,'عنوان الامتحان أو الكويز','title','input',{required:'',maxlength:'120'});
+  c.field(draft.form,'الموعد','at','input',{required:'',type:'datetime-local'});
+  c.select(draft.form,'ذكّرني قبل الموعد بـ','lead',[[15,'١٥ دقيقة'],[30,'٣٠ دقيقة'],[60,'ساعة'],[1440,'يوم']]);
+  draft.finish();
+  const list=node('div');
+  alarmCard.append(list,node('p','يظهر التنبيه داخل المكتبة وهي مفتوحة.',{class:'muted'}));
+  let alarms=[];
   const seen=new Set();
   function check(){
     const now=Date.now();
@@ -80,7 +85,7 @@ export function communityPanel({main,user,db,community,node,names}){
       const alert=node('p','اقترب موعد «'+row.title+'» — '+formatDate(row.at),{class:'status'});
       notices.append(alert);
     }
-    redraw();
+    if(!alarmPane.hidden)drawAlarms(list);
   }
   function drawAlarms(list){
     const now=Date.now();
@@ -139,7 +144,6 @@ export function communityPanel({main,user,db,community,node,names}){
     c.field(draft.form,'عنوان الاقتراح أو الشكوى','title','input',{required:'',maxlength:'120'});
     c.field(draft.form,'الرسالة','body','textarea',{required:'',rows:'4',maxlength:'1500'});draft.finish();
   });
-  first.click();
 }
 export function examConversation({pane,community,node,exam}){
   const c=controls(node), title=node('h3','الحلول والنقاش'), comments=node('div');
