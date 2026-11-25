@@ -5,14 +5,17 @@ const missing=required.filter(name=>!process.env[name]);
 const localEmulators=!process.env.RENDER&&['FIREBASE_AUTH_EMULATOR_HOST','FIRESTORE_EMULATOR_HOST','FIREBASE_STORAGE_EMULATOR_HOST'].every(name=>process.env[name]);
 if(missing.length&&!localEmulators)throw new Error('Missing configuration: '+missing.join(', '));
 const handlers=require('./index.js');
+const {getFirestore}=require('firebase-admin/firestore');
+const {reminderPush}=require('./reminder-push.cjs');
 const app=express();
 app.disable('x-powered-by');
 app.set('trust proxy',1);
 app.get('/healthz',(_req,res)=>res.json({ok:true}));
 const parse=express.json({limit:'15mb'});
-for(const name of ['accounts','management','library','community']){
+for(const name of ['accounts','management','library','community','reminders']){
   app.post('/api/'+name,parse,(req,res)=>handlers[name](req,res));
 }
+app.post('/internal/reminders',reminderPush({db:getFirestore()}).dispatch);
 const publicDir=path.join(__dirname,'../public');
 app.use(express.static(publicDir,{index:false}));
 app.get(/^\/(?:|register\/?|activate\/?|verify\/?|reset\/?|staff\/?|library\/?|workspace\/?)$/,(_req,res)=>res.sendFile(path.join(publicDir,'index.html')));
