@@ -54,9 +54,7 @@ export async function studyWorkspace({main,user,db,materials,favoriteSubjects,li
     if(sectionFilter.value&&sections.get(subject.value)!==sectionFilter.value)subject.value='';
     render();
   };
-  const year=select('السنة',[...new Set(catalog.exams.map(x=>x.year).filter(Boolean))].sort().reverse().map(y=>[y,y]));
-  const term=select('الفصل',Object.entries(terms));
-  const kind=select('نوع الامتحان',Object.entries(kinds));
+  const kind=select('نوع الامتحان',['mid','final','general','makeup'].map(key=>[key,kinds[key]]));
   search.oninput=render;
   for(const [key,label] of [['all','كل الأقسام'],['favorite','المفضلة'],['recent','شوهد مؤخرًا'],['popular','الأكثر مشاهدة']]){
     const tab=button(label,async()=>{
@@ -86,8 +84,8 @@ export async function studyWorkspace({main,user,db,materials,favoriteSubjects,li
       const state=records.get(exam.id);
       return (mode!=='favorite'||isFavorite(exam))&&(mode!=='recent'||state?.viewedAt)&&
         (mode!=='popular'||exam.views>0)&&
-        (!subject.value||exam.subject===subject.value)&&(!sectionFilter.value||sections.get(exam.subject)===sectionFilter.value)&&(!year.value||String(exam.year)===year.value)&&
-        (!term.value||exam.term===term.value)&&(!kind.value||exam.kind===kind.value)&&
+        (!subject.value||exam.subject===subject.value)&&(!sectionFilter.value||sections.get(exam.subject)===sectionFilter.value)&&
+        (!kind.value||exam.kind===kind.value)&&
         normalize([exam.title,names.get(exam.subject),exam.year,kinds[exam.kind],terms[exam.term]].join(' ')).includes(normalize(search.value.trim()));
     });
     const millis=x=>typeof x==='number'?x:x?.toMillis?.()??0;
